@@ -2,15 +2,20 @@
 
 ## Project Overview
 
-This project is a modular machine learning pipeline for detecting fraudulent credit card transactions. It demonstrates an end-to-end classification workflow, including data loading, preprocessing, model training, evaluation, and saving results for reproducibility.
+This project is a modular machine learning pipeline for detecting potentially fraudulent credit card transactions. It demonstrates an end-to-end classification workflow, including data loading, validation, preprocessing, stratified train-test splitting, model training, evaluation, and saving results for reproducibility.
 
 The project is designed as a GitHub portfolio piece for Data Science, Machine Learning, and AI internship applications.
 
-## Problem Statement
+## Business Problem
 
-Credit card fraud detection is a highly imbalanced binary classification problem. Fraudulent transactions are rare compared with normal transactions, so model performance must be evaluated with metrics that reflect minority-class detection, not accuracy alone.
+Credit card fraud detection is a risk analytics problem where fraudulent transactions are rare compared with normal transactions. Because the positive class is small, accuracy alone can be misleading: a model could appear accurate while still missing many fraud cases.
 
-The goal is to identify fraudulent transactions while keeping the pipeline simple, readable, and easy to extend.
+The goal is to identify suspicious transactions while balancing two business risks:
+
+- **False negatives:** fraudulent transactions that the model misses.
+- **False positives:** legitimate transactions that are incorrectly flagged as fraud.
+
+In practice, fraud teams often care about recall, precision, F1-score, and PR-AUC because these metrics describe how well the model detects the rare fraud class and how many false alerts it creates.
 
 ## Tech Stack
 
@@ -22,7 +27,7 @@ The goal is to identify fraudulent transactions while keeping the pipeline simpl
 - joblib
 - XGBoost, optional if installed
 
-## Dataset Note
+## Dataset
 
 The pipeline expects the dataset at:
 
@@ -35,18 +40,38 @@ The target column must be named `Class`:
 - `0` = normal transaction
 - `1` = fraudulent transaction
 
-The dataset file is not committed to GitHub because it may be large and may have licensing restrictions.
+The dataset file is not committed to GitHub because it may be large and may have licensing restrictions. It is intentionally excluded from version control, so users should download the dataset separately and place it in the `data/` folder before running the pipeline.
 
-## Workflow
+Recommended dataset details to update after downloading the data:
 
-1. Load transaction data from `data/creditcard.csv`
-2. Validate that the target column exists
-3. Split the dataset into features and target
-4. Create a stratified train-test split
-5. Apply preprocessing inside scikit-learn pipelines
-6. Train multiple classification models
-7. Evaluate each model using fraud-relevant metrics
-8. Save metrics, confusion matrix, and the best model artifact
+| Item | Value |
+|---|---|
+| Dataset source | TODO: add source link |
+| Number of rows | TODO: update after loading dataset |
+| Number of features | TODO: update after loading dataset |
+| Target column | `Class` |
+| Fraud class | `1` |
+| Fraud rate | TODO: update after checking class distribution |
+
+## Pipeline Workflow
+
+```text
+Raw CSV Data
+     ↓
+Validate Target Column
+     ↓
+Split Features and Target
+     ↓
+Stratified Train/Test Split
+     ↓
+Preprocessing with scikit-learn Pipelines
+     ↓
+Train Logistic Regression, Random Forest, and optional XGBoost
+     ↓
+Evaluate with Fraud-Relevant Metrics
+     ↓
+Save Metrics, Confusion Matrix, and Best Model
+```
 
 ## Model Training Approach
 
@@ -68,16 +93,18 @@ Preprocessing is included inside model pipelines to keep training and evaluation
 
 ## Evaluation Metrics
 
-The project evaluates models using:
+Because fraud detection is highly imbalanced, accuracy alone is not a reliable metric. This project evaluates models using metrics that better reflect rare-class detection:
 
-- Confusion matrix
-- Precision
-- Recall
-- F1-score
-- ROC-AUC
-- PR-AUC
+| Metric | Why It Matters |
+|---|---|
+| Confusion matrix | Shows true negatives, false positives, false negatives, and true positives |
+| Precision | Of the transactions flagged as fraud, how many were actually fraud |
+| Recall | Of all real fraud cases, how many the model detected |
+| F1-score | Balances precision and recall |
+| ROC-AUC | Measures ranking quality across classification thresholds |
+| PR-AUC | Especially useful when the positive class is rare |
 
-For fraud detection, recall and PR-AUC are especially important because the positive class is rare.
+The best model is selected using PR-AUC because it is better suited for imbalanced classification than accuracy.
 
 ## Results
 
@@ -88,15 +115,29 @@ Current results from the included pipeline run:
 | Logistic Regression | 0.0610 | 0.9184 | 0.1144 | 0.9721 | 0.7189 |
 | Random Forest | 0.9605 | 0.7449 | 0.8391 | 0.9529 | 0.8542 |
 
-The best model is selected using PR-AUC because it is better suited for imbalanced classification than accuracy.
+### Key Takeaways
 
-Generated outputs:
+- Logistic Regression achieved higher recall in this run, meaning it identified more fraud cases, but its low precision indicates many false positives.
+- Random Forest achieved stronger precision, F1-score, and PR-AUC in this run, making it the best model under the current PR-AUC selection rule.
+- These results should be interpreted as baseline model results. Threshold tuning, cross-validation, and hyperparameter tuning could change the precision-recall tradeoff.
+
+### Confusion Matrix
+
+The confusion matrix below is generated for the best model selected by PR-AUC:
+
+![Confusion Matrix](results/confusion_matrix.png)
+
+## Generated Outputs
+
+After running the pipeline, the following files are generated or updated:
 
 ```text
-results/metrics.csv
-results/confusion_matrix.png
-models/best_model.pkl
+results/metrics.csv              # model comparison metrics
+results/confusion_matrix.png      # confusion matrix for the best model
+models/best_model.pkl             # saved best model artifact
 ```
+
+The trained model artifact is not committed to GitHub because model files are generated outputs and can become large.
 
 ## How to Run
 
@@ -106,7 +147,15 @@ Create a virtual environment:
 python -m venv .venv
 ```
 
-Activate it on Windows:
+Activate the environment.
+
+On macOS/Linux:
+
+```bash
+source .venv/bin/activate
+```
+
+On Windows:
 
 ```bash
 .venv\Scripts\activate
@@ -116,6 +165,12 @@ Install dependencies:
 
 ```bash
 pip install -r requirements.txt
+```
+
+Optional: install XGBoost if you want to train the XGBoost model too:
+
+```bash
+pip install xgboost
 ```
 
 Run the full pipeline:
@@ -130,19 +185,32 @@ python main.py
 fraud-detection-ml-pipeline/
 |-- data/
 |   |-- README.md
-|   `-- creditcard.csv
+|   `-- creditcard.csv          # not committed; user-provided dataset
 |-- models/
 |   |-- README.md
-|   `-- best_model.pkl
+|   `-- best_model.pkl          # generated after running the pipeline
 |-- results/
-|   |-- metrics.csv
-|   `-- confusion_matrix.png
-|-- evaluate_model.py
-|-- main.py
-|-- train_model.py
+|   |-- metrics.csv             # saved model metrics
+|   `-- confusion_matrix.png    # saved confusion matrix image
+|-- evaluate_model.py           # evaluation metrics and plotting
+|-- main.py                     # pipeline entry point
+|-- train_model.py              # data loading, splitting, and model training
 |-- requirements.txt
 `-- README.md
 ```
+
+## Skills Demonstrated
+
+- Python scripting for end-to-end ML workflows
+- Data loading and validation with pandas
+- Train-test splitting with stratification
+- Preprocessing with scikit-learn pipelines
+- Handling class imbalance with class weights
+- Training Logistic Regression and Random Forest models
+- Optional XGBoost model training
+- Fraud-focused model evaluation with precision, recall, F1-score, ROC-AUC, PR-AUC, and confusion matrix
+- Saving model artifacts with joblib
+- Organizing a machine learning repository for GitHub portfolio presentation
 
 ## Future Improvements
 
