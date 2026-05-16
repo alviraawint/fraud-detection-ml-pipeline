@@ -46,12 +46,12 @@ Recommended dataset details to update after downloading the data:
 
 | Item | Value |
 |---|---|
-| Dataset source | TODO: add source link |
-| Number of rows | TODO: update after loading dataset |
-| Number of features | TODO: update after loading dataset |
+| Dataset source | https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud |
+| Number of rows | 284807 |
+| Number of features | 30 |
 | Target column | `Class` |
 | Fraud class | `1` |
-| Fraud rate | TODO: update after checking class distribution |
+| Fraud rate | 0.1727% |
 
 ## Pipeline Workflow
 
