@@ -2,15 +2,20 @@
 
 ## Project Overview
 
-This project is a modular machine learning pipeline for detecting fraudulent credit card transactions. It demonstrates an end-to-end classification workflow, including data loading, preprocessing, model training, evaluation, and saving results for reproducibility.
+This project is a modular machine learning pipeline for detecting potentially fraudulent credit card transactions. It demonstrates an end-to-end classification workflow, including data loading, validation, preprocessing, stratified train-test splitting, model training, evaluation, and saving results for reproducibility.
 
 The project is designed as a GitHub portfolio piece for Data Science, Machine Learning, and AI internship applications.
 
-## Problem Statement
+## Business Problem
 
-Credit card fraud detection is a highly imbalanced binary classification problem. Fraudulent transactions are rare compared with normal transactions, so model performance must be evaluated with metrics that reflect minority-class detection, not accuracy alone.
+Credit card fraud detection is a risk analytics problem where fraudulent transactions are rare compared with normal transactions. Because the positive class is small, accuracy alone can be misleading: a model could appear accurate while still missing many fraud cases.
 
-The goal is to identify fraudulent transactions while keeping the pipeline simple, readable, and easy to extend.
+The goal is to identify suspicious transactions while balancing two business risks:
+
+- **False negatives:** fraudulent transactions that the model misses.
+- **False positives:** legitimate transactions that are incorrectly flagged as fraud.
+
+In practice, fraud teams often care about recall, precision, F1-score, and PR-AUC because these metrics describe how well the model detects the rare fraud class and how many false alerts it creates.
 
 ## Tech Stack
 
@@ -22,7 +27,7 @@ The goal is to identify fraudulent transactions while keeping the pipeline simpl
 - joblib
 - XGBoost, optional if installed
 
-## Dataset Note
+## Dataset
 
 The pipeline expects the dataset at:
 
@@ -35,19 +40,42 @@ The target column must be named `Class`:
 - `0` = normal transaction
 - `1` = fraudulent transaction
 
-The dataset file is not committed to GitHub because it may be large and may have licensing restrictions.
+The dataset file is not committed to GitHub because it may be large and may have licensing restrictions. It is intentionally excluded from version control, so users should download the dataset separately and place it in the `data/` folder before running the pipeline.
 
-## Workflow
+Recommended dataset details to update after downloading the data:
 
-1. Load transaction data from `data/creditcard.csv`
-2. Validate that the target column exists
-3. Split the dataset into features and target
-4. Create a stratified train-test split
-5. Apply preprocessing inside scikit-learn pipelines
-6. Tune hyperparameters and select the best model with stratified k-fold cross-validation on the training set
-7. Train all models on the full training set
-8. Evaluate each model once on the held-out test set using fraud-relevant metrics
-9. Save cross-validation results, test metrics, confusion matrix, and the best model artifact
+| Item | Value |
+|---|---|
+| Dataset source | https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud |
+| Number of rows | 284807 |
+| Number of features | 30 |
+| Target column | `Class` |
+| Fraud class | `1` |
+| Fraud rate | 0.1727% |
+
+## Pipeline Workflow
+
+```text
+Raw CSV Data
+     ↓
+Validate Target Column
+     ↓
+Split Features and Target
+     ↓
+Stratified Train/Test Split
+     ↓
+Preprocessing with scikit-learn Pipelines
+     ↓
+Tune Hyperparameters + Select Best Model (Stratified K-Fold CV, PR-AUC)
+     ↓
+Train Best Models on Full Training Set
+     ↓
+Evaluate Once on Held-Out Test Set (Fraud-Relevant Metrics)
+     ↓
+Tune Decision Threshold (from Training CV)
+     ↓
+Save CV Results, Metrics, Threshold Comparison, Plots, and Best Model
+```
 
 ## Model Training Approach
 
@@ -69,16 +97,18 @@ Preprocessing is included inside model pipelines to keep training and evaluation
 
 ## Evaluation Metrics
 
-The project evaluates models using:
+Because fraud detection is highly imbalanced, accuracy alone is not a reliable metric. This project evaluates models using metrics that better reflect rare-class detection:
 
-- Confusion matrix
-- Precision
-- Recall
-- F1-score
-- ROC-AUC
-- PR-AUC
+| Metric | Why It Matters |
+|---|---|
+| Confusion matrix | Shows true negatives, false positives, false negatives, and true positives |
+| Precision | Of the transactions flagged as fraud, how many were actually fraud |
+| Recall | Of all real fraud cases, how many the model detected |
+| F1-score | Balances precision and recall |
+| ROC-AUC | Measures ranking quality across classification thresholds |
+| PR-AUC | Especially useful when the positive class is rare |
 
-For fraud detection, recall and PR-AUC are especially important because the positive class is rare.
+The best model is selected using PR-AUC because it is better suited for imbalanced classification than accuracy.
 
 ## Hyperparameter Tuning and Model Selection
 
@@ -113,6 +143,18 @@ PR-AUC is used as the selection metric because it is better suited for imbalance
 classification than accuracy. Random Forest wins on both cross-validation and the
 held-out test set.
 
+### Key Takeaways
+
+- Logistic Regression achieved higher recall at the default threshold, meaning it identified more fraud cases, but its low precision indicates many false positives.
+- Random Forest achieved stronger precision, F1-score, and PR-AUC, making it the best model under the PR-AUC selection rule.
+- Cross-validation and hyperparameter tuning are already applied (see the section above); the decision threshold is tuned below to adjust the precision-recall tradeoff.
+
+### Confusion Matrix
+
+The confusion matrix below is generated for the best model selected by PR-AUC:
+
+![Confusion Matrix](results/confusion_matrix.png)
+
 ## Threshold Tuning
 
 The metrics above use the default 0.5 probability cutoff, which is rarely the right
@@ -141,16 +183,20 @@ Key takeaways:
   collapses, which illustrates the precision-recall tradeoff and why the threshold
   should be chosen from the business cost of false negatives vs false positives.
 
-Generated outputs:
+## Generated Outputs
+
+After running the pipeline, the following files are generated or updated:
 
 ```text
-results/tuning_results.csv
-results/metrics.csv
-results/threshold_metrics.csv
-results/confusion_matrix.png
-results/precision_recall_curve.png
-models/best_model.pkl
+results/tuning_results.csv         # cross-validated tuning results per model
+results/metrics.csv                # test-set model comparison metrics
+results/threshold_metrics.csv      # test-set metrics at different thresholds
+results/confusion_matrix.png       # confusion matrix for the best model
+results/precision_recall_curve.png # precision-recall curve for the best model
+models/best_model.pkl              # saved best model artifact
 ```
+
+The trained model artifact is not committed to GitHub because model files are generated outputs and can become large.
 
 ## How to Run
 
@@ -160,7 +206,15 @@ Create a virtual environment:
 python -m venv .venv
 ```
 
-Activate it on Windows:
+Activate the environment.
+
+On macOS/Linux:
+
+```bash
+source .venv/bin/activate
+```
+
+On Windows:
 
 ```bash
 .venv\Scripts\activate
@@ -170,6 +224,12 @@ Install dependencies:
 
 ```bash
 pip install -r requirements.txt
+```
+
+Optional: install XGBoost if you want to train the XGBoost model too:
+
+```bash
+pip install xgboost
 ```
 
 Run the full pipeline:
@@ -184,22 +244,38 @@ python main.py
 fraud-detection-ml-pipeline/
 |-- data/
 |   |-- README.md
-|   `-- creditcard.csv
+|   `-- creditcard.csv          # not committed; user-provided dataset
 |-- models/
 |   |-- README.md
-|   `-- best_model.pkl
+|   `-- best_model.pkl          # generated after running the pipeline
 |-- results/
-|   |-- tuning_results.csv
-|   |-- metrics.csv
-|   |-- threshold_metrics.csv
-|   |-- confusion_matrix.png
-|   `-- precision_recall_curve.png
-|-- evaluate_model.py
-|-- main.py
-|-- train_model.py
+|   |-- tuning_results.csv      # cross-validated tuning results
+|   |-- metrics.csv             # saved model metrics
+|   |-- threshold_metrics.csv   # metrics at different thresholds
+|   |-- confusion_matrix.png    # saved confusion matrix image
+|   `-- precision_recall_curve.png # saved precision-recall curve
+|-- evaluate_model.py           # evaluation metrics and plotting
+|-- main.py                     # pipeline entry point
+|-- train_model.py              # data loading, splitting, and model training
 |-- requirements.txt
 `-- README.md
 ```
+
+## Skills Demonstrated
+
+- Python scripting for end-to-end ML workflows
+- Data loading and validation with pandas
+- Train-test splitting with stratification
+- Preprocessing with scikit-learn pipelines
+- Handling class imbalance with class weights
+- Training Logistic Regression and Random Forest models
+- Optional XGBoost model training
+- Fraud-focused model evaluation with precision, recall, F1-score, ROC-AUC, PR-AUC, and confusion matrix
+- Leak-free model selection with stratified k-fold cross-validation
+- Hyperparameter tuning with RandomizedSearchCV
+- Decision-threshold tuning from the precision-recall curve
+- Saving model artifacts with joblib
+- Organizing a machine learning repository for GitHub portfolio presentation
 
 ## Future Improvements
 
