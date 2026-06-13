@@ -164,8 +164,8 @@ def build_param_distributions(models):
             "model__C": [0.01, 0.03, 0.1, 0.3, 1.0, 3.0, 10.0, 30.0, 100.0],
         },
         "Random Forest": {
-            "model__n_estimators": [100, 200, 300],
-            "model__max_depth": [None, 10, 20],
+            "model__n_estimators": [100, 200],
+            "model__max_depth": [None, 20],
             "model__min_samples_split": [2, 5],
             "model__min_samples_leaf": [1, 2],
             "model__max_features": ["sqrt", 0.5],

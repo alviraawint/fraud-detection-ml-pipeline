@@ -1,3 +1,4 @@
 model,pr_auc_mean,pr_auc_std,best_params
-Random Forest,0.8458421598800687,0.01844927484805343,"{""model__n_estimators"": 200, ""model__min_samples_split"": 5, ""model__min_samples_leaf"": 1, ""model__max_features"": ""sqrt"", ""model__max_depth"": null}"
+XGBoost,0.8481224018091534,0.023411280217440406,"{""model__subsample"": 0.7, ""model__n_estimators"": 400, ""model__max_depth"": 4, ""model__learning_rate"": 0.05, ""model__colsample_bytree"": 1.0}"
+Random Forest,0.8451319071554824,0.018578828008924096,"{""model__n_estimators"": 200, ""model__min_samples_split"": 2, ""model__min_samples_leaf"": 1, ""model__max_features"": ""sqrt"", ""model__max_depth"": 20}"
 Logistic Regression,0.7568045872309979,0.05182919993401819,"{""model__C"": 0.1}"
