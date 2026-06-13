@@ -25,7 +25,7 @@ In practice, fraud teams often care about recall, precision, F1-score, and PR-AU
 - scikit-learn
 - Matplotlib
 - joblib
-- XGBoost, optional if installed
+- XGBoost
 
 ## Dataset
 
@@ -79,14 +79,14 @@ Save CV Results, Metrics, Threshold Comparison, Plots, and Best Model
 
 ## Model Training Approach
 
-The pipeline trains at least two models:
+The pipeline trains three models:
 
 - Logistic Regression
 - Random Forest
-
-If `xgboost` is installed, the pipeline also trains:
-
 - XGBoost Classifier
+
+XGBoost is included in `requirements.txt`. If for some reason it is not installed,
+the pipeline degrades gracefully and trains only Logistic Regression and Random Forest.
 
 Class imbalance is handled using:
 
@@ -127,7 +127,8 @@ Best cross-validated results per model (training set):
 
 | Model | Mean PR-AUC | Std PR-AUC | Best Hyperparameters |
 |---|---:|---:|---|
-| Random Forest | 0.8458 | 0.0184 | n_estimators=200, max_depth=None, min_samples_split=5, min_samples_leaf=1, max_features=sqrt |
+| XGBoost | 0.8481 | 0.0234 | n_estimators=400, max_depth=4, learning_rate=0.05, subsample=0.7, colsample_bytree=1.0 |
+| Random Forest | 0.8451 | 0.0186 | n_estimators=200, max_depth=20, min_samples_split=2, min_samples_leaf=1, max_features=sqrt |
 | Logistic Regression | 0.7568 | 0.0518 | C=0.1 |
 
 ## Results
@@ -137,17 +138,24 @@ Final results on the held-out test set (default 0.5 threshold):
 | Model | Precision | Recall | F1-score | ROC-AUC | PR-AUC |
 |---|---:|---:|---:|---:|---:|
 | Logistic Regression | 0.0611 | 0.9184 | 0.1145 | 0.9720 | 0.7107 |
-| Random Forest | 0.9610 | 0.7551 | 0.8457 | 0.9566 | 0.8633 |
+| Random Forest | 0.9487 | 0.7551 | 0.8409 | 0.9514 | 0.8571 |
+| XGBoost | 0.7179 | 0.8571 | 0.7814 | 0.9821 | 0.8668 |
 
 PR-AUC is used as the selection metric because it is better suited for imbalanced
-classification than accuracy. Random Forest wins on both cross-validation and the
-held-out test set.
+classification than accuracy. XGBoost wins on cross-validated PR-AUC (the selection
+metric) and also has the highest test-set PR-AUC and ROC-AUC, with Random Forest a
+close second.
 
 ### Key Takeaways
 
-- Logistic Regression achieved higher recall at the default threshold, meaning it identified more fraud cases, but its low precision indicates many false positives.
-- Random Forest achieved stronger precision, F1-score, and PR-AUC, making it the best model under the PR-AUC selection rule.
-- Cross-validation and hyperparameter tuning are already applied (see the section above); the decision threshold is tuned below to adjust the precision-recall tradeoff.
+- Logistic Regression achieved the highest recall at the default threshold but with
+  very low precision, meaning it flags far too many legitimate transactions as fraud.
+- XGBoost has the best cross-validated and test-set PR-AUC, so it is selected as the
+  best model; Random Forest is a close second.
+- At the default 0.5 threshold XGBoost shows lower precision and F1 than Random Forest.
+  This is because `scale_pos_weight` shifts its predicted probabilities, so 0.5 is a
+  poor cutoff. Tuning the decision threshold (below) fixes this and makes XGBoost the
+  strongest model overall.
 
 ### Confusion Matrix
 
@@ -162,25 +170,25 @@ operating point for imbalanced fraud detection. For the best model, a decision
 threshold is selected from **cross-validated predictions on the training set** (the
 test set is not used to pick the threshold) and then applied once to the test set.
 
-Test-set metrics for the best model (Random Forest) at different thresholds:
+Test-set metrics for the best model (XGBoost) at different thresholds:
 
 | Strategy | Threshold | Precision | Recall | F1-score |
 |---|---:|---:|---:|---:|
-| Default (0.5) | 0.50 | 0.9610 | 0.7551 | 0.8457 |
-| Max F1 | 0.20 | 0.8300 | 0.8469 | 0.8384 |
-| Recall >= 0.90 | 0.01 | 0.1080 | 0.8980 | 0.1928 |
+| Default (0.5) | 0.50 | 0.7179 | 0.8571 | 0.7814 |
+| Max F1 | 0.92 | 0.8804 | 0.8265 | 0.8526 |
+| Recall >= 0.90 | 0.01 | 0.0543 | 0.9286 | 0.1025 |
 
 Key takeaways:
 
-- The **max-F1 threshold (0.20)** trades precision for recall: it lifts recall from
-  0.76 to 0.85, but on this test set its F1 (0.838) is essentially tied with the
-  default (0.846). The right choice depends on whether catching more fraud is worth
-  the extra false positives.
-- The max-F1 threshold is chosen on training cross-validation, so it does not always
-  beat the default on the test set. This small gap is itself a useful illustration
-  of how an operating point selected on one split generalizes to unseen data.
-- Forcing **90% recall** requires such a low threshold (0.01) that precision
-  collapses, which illustrates the precision-recall tradeoff and why the threshold
+- XGBoost is trained with `scale_pos_weight` to counter the class imbalance, which
+  inflates its predicted fraud probabilities. As a result the default 0.5 cutoff is a
+  poor operating point (F1 0.78) and the max-F1 threshold is pushed up to about 0.92.
+- At the **max-F1 threshold (0.92)** XGBoost reaches precision 0.88 and recall 0.83 for
+  an F1 of 0.85 — a large jump over its default-0.5 F1 (0.78), and better than Random
+  Forest. This is a concrete example of why the decision threshold must be tuned,
+  especially for models that internally reweight the classes.
+- Forcing **90% recall** requires such a low threshold (0.01) that precision collapses
+  to about 0.05, which illustrates the precision-recall tradeoff and why the threshold
   should be chosen from the business cost of false negatives vs false positives.
 
 ## Generated Outputs
@@ -220,16 +228,10 @@ On Windows:
 .venv\Scripts\activate
 ```
 
-Install dependencies:
+Install dependencies (includes XGBoost):
 
 ```bash
 pip install -r requirements.txt
-```
-
-Optional: install XGBoost if you want to train the XGBoost model too:
-
-```bash
-pip install xgboost
 ```
 
 Run the full pipeline:
@@ -268,8 +270,7 @@ fraud-detection-ml-pipeline/
 - Train-test splitting with stratification
 - Preprocessing with scikit-learn pipelines
 - Handling class imbalance with class weights
-- Training Logistic Regression and Random Forest models
-- Optional XGBoost model training
+- Training Logistic Regression, Random Forest, and XGBoost models
 - Fraud-focused model evaluation with precision, recall, F1-score, ROC-AUC, PR-AUC, and confusion matrix
 - Leak-free model selection with stratified k-fold cross-validation
 - Hyperparameter tuning with RandomizedSearchCV
