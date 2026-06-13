@@ -66,11 +66,15 @@ Stratified Train/Test Split
      ↓
 Preprocessing with scikit-learn Pipelines
      ↓
-Train Logistic Regression, Random Forest, and optional XGBoost
+Tune Hyperparameters + Select Best Model (Stratified K-Fold CV, PR-AUC)
      ↓
-Evaluate with Fraud-Relevant Metrics
+Train Best Models on Full Training Set
      ↓
-Save Metrics, Confusion Matrix, and Best Model
+Evaluate Once on Held-Out Test Set (Fraud-Relevant Metrics)
+     ↓
+Tune Decision Threshold (from Training CV)
+     ↓
+Save CV Results, Metrics, Threshold Comparison, Plots, and Best Model
 ```
 
 ## Model Training Approach
@@ -106,20 +110,44 @@ Because fraud detection is highly imbalanced, accuracy alone is not a reliable m
 
 The best model is selected using PR-AUC because it is better suited for imbalanced classification than accuracy.
 
+## Hyperparameter Tuning and Model Selection
+
+Each model's hyperparameters are tuned with **RandomizedSearchCV** using **5-fold
+stratified cross-validation on the training set only**, scored by PR-AUC. The best
+configuration per model is compared, and the overall best model is selected by mean
+cross-validated PR-AUC. The test set is never used for tuning or selection; it is
+held out and scored a single time for the final results below. This avoids leaking
+the test set into the selection decision and gives a variance estimate (standard
+deviation across folds) for each model.
+
+`RandomizedSearchCV` is preferred over an exhaustive grid search because it samples
+the parameter space, covering more ground for a fixed compute budget.
+
+Best cross-validated results per model (training set):
+
+| Model | Mean PR-AUC | Std PR-AUC | Best Hyperparameters |
+|---|---:|---:|---|
+| Random Forest | 0.8458 | 0.0184 | n_estimators=200, max_depth=None, min_samples_split=5, min_samples_leaf=1, max_features=sqrt |
+| Logistic Regression | 0.7568 | 0.0518 | C=0.1 |
+
 ## Results
 
-Current results from the included pipeline run:
+Final results on the held-out test set (default 0.5 threshold):
 
 | Model | Precision | Recall | F1-score | ROC-AUC | PR-AUC |
 |---|---:|---:|---:|---:|---:|
-| Logistic Regression | 0.0610 | 0.9184 | 0.1144 | 0.9721 | 0.7189 |
-| Random Forest | 0.9605 | 0.7449 | 0.8391 | 0.9529 | 0.8542 |
+| Logistic Regression | 0.0611 | 0.9184 | 0.1145 | 0.9720 | 0.7107 |
+| Random Forest | 0.9610 | 0.7551 | 0.8457 | 0.9566 | 0.8633 |
+
+PR-AUC is used as the selection metric because it is better suited for imbalanced
+classification than accuracy. Random Forest wins on both cross-validation and the
+held-out test set.
 
 ### Key Takeaways
 
-- Logistic Regression achieved higher recall in this run, meaning it identified more fraud cases, but its low precision indicates many false positives.
-- Random Forest achieved stronger precision, F1-score, and PR-AUC in this run, making it the best model under the current PR-AUC selection rule.
-- These results should be interpreted as baseline model results. Threshold tuning, cross-validation, and hyperparameter tuning could change the precision-recall tradeoff.
+- Logistic Regression achieved higher recall at the default threshold, meaning it identified more fraud cases, but its low precision indicates many false positives.
+- Random Forest achieved stronger precision, F1-score, and PR-AUC, making it the best model under the PR-AUC selection rule.
+- Cross-validation and hyperparameter tuning are already applied (see the section above); the decision threshold is tuned below to adjust the precision-recall tradeoff.
 
 ### Confusion Matrix
 
@@ -127,14 +155,45 @@ The confusion matrix below is generated for the best model selected by PR-AUC:
 
 ![Confusion Matrix](results/confusion_matrix.png)
 
+## Threshold Tuning
+
+The metrics above use the default 0.5 probability cutoff, which is rarely the right
+operating point for imbalanced fraud detection. For the best model, a decision
+threshold is selected from **cross-validated predictions on the training set** (the
+test set is not used to pick the threshold) and then applied once to the test set.
+
+Test-set metrics for the best model (Random Forest) at different thresholds:
+
+| Strategy | Threshold | Precision | Recall | F1-score |
+|---|---:|---:|---:|---:|
+| Default (0.5) | 0.50 | 0.9610 | 0.7551 | 0.8457 |
+| Max F1 | 0.20 | 0.8300 | 0.8469 | 0.8384 |
+| Recall >= 0.90 | 0.01 | 0.1080 | 0.8980 | 0.1928 |
+
+Key takeaways:
+
+- The **max-F1 threshold (0.20)** trades precision for recall: it lifts recall from
+  0.76 to 0.85, but on this test set its F1 (0.838) is essentially tied with the
+  default (0.846). The right choice depends on whether catching more fraud is worth
+  the extra false positives.
+- The max-F1 threshold is chosen on training cross-validation, so it does not always
+  beat the default on the test set. This small gap is itself a useful illustration
+  of how an operating point selected on one split generalizes to unseen data.
+- Forcing **90% recall** requires such a low threshold (0.01) that precision
+  collapses, which illustrates the precision-recall tradeoff and why the threshold
+  should be chosen from the business cost of false negatives vs false positives.
+
 ## Generated Outputs
 
 After running the pipeline, the following files are generated or updated:
 
 ```text
-results/metrics.csv              # model comparison metrics
-results/confusion_matrix.png      # confusion matrix for the best model
-models/best_model.pkl             # saved best model artifact
+results/tuning_results.csv         # cross-validated tuning results per model
+results/metrics.csv                # test-set model comparison metrics
+results/threshold_metrics.csv      # test-set metrics at different thresholds
+results/confusion_matrix.png       # confusion matrix for the best model
+results/precision_recall_curve.png # precision-recall curve for the best model
+models/best_model.pkl              # saved best model artifact
 ```
 
 The trained model artifact is not committed to GitHub because model files are generated outputs and can become large.
@@ -190,8 +249,11 @@ fraud-detection-ml-pipeline/
 |   |-- README.md
 |   `-- best_model.pkl          # generated after running the pipeline
 |-- results/
+|   |-- tuning_results.csv      # cross-validated tuning results
 |   |-- metrics.csv             # saved model metrics
-|   `-- confusion_matrix.png    # saved confusion matrix image
+|   |-- threshold_metrics.csv   # metrics at different thresholds
+|   |-- confusion_matrix.png    # saved confusion matrix image
+|   `-- precision_recall_curve.png # saved precision-recall curve
 |-- evaluate_model.py           # evaluation metrics and plotting
 |-- main.py                     # pipeline entry point
 |-- train_model.py              # data loading, splitting, and model training
@@ -209,13 +271,14 @@ fraud-detection-ml-pipeline/
 - Training Logistic Regression and Random Forest models
 - Optional XGBoost model training
 - Fraud-focused model evaluation with precision, recall, F1-score, ROC-AUC, PR-AUC, and confusion matrix
+- Leak-free model selection with stratified k-fold cross-validation
+- Hyperparameter tuning with RandomizedSearchCV
+- Decision-threshold tuning from the precision-recall curve
 - Saving model artifacts with joblib
 - Organizing a machine learning repository for GitHub portfolio presentation
 
 ## Future Improvements
 
-- Add cross-validation and hyperparameter tuning
-- Add threshold tuning to improve the precision-recall tradeoff
 - Compare additional imbalance techniques such as SMOTE or undersampling
 - Track experiments with MLflow or Weights & Biases
 - Add unit tests for data loading, model training, and evaluation
